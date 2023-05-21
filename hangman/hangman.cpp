@@ -3,6 +3,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <ctime>
+#include <conio.h> // for _getch and _kbhit
 #include <vector>
 #include <algorithm>
 #include <filesystem>
@@ -69,44 +70,42 @@ std::vector<std::string> getAsciiFiles() {
     return files;
 }
 
-void processGuess(
-    const std::string& guess,
+/*
+return 0 for wrong guess
+return 1 for correct character guess
+return 2 for correct word guess (win)
+return 3 for already guessed letter
+*/
+int processGuess(
+    const std::string guess,
     const std::string wordToGuess,
-    const std::vector<char>& lettersInWordToGuess,
-    std::vector<char>& guessedLetters,
-    int& lives,
-    bool& gameLost
+    const std::vector<char> lettersInWordToGuess,
+    std::vector<char>& guessedLetters
 ) {
     if (guess.length() == 1) {
+        if (isCharInVector(guess[0], guessedLetters)) return 3;
+
         guessedLetters.push_back(guess[0]);
 
-        if (!isCharInVector(guess[0], lettersInWordToGuess)) {
-            lives--;
-            return;
-        }
-
-        return;
+        return isCharInVector(guess[0], lettersInWordToGuess);
     }
 
-    if (guess == wordToGuess) {
-        lives = 0;
-        return;
-    }
-
-    lives--;
-    if (lives == 0) gameLost = true;
+    return guess == wordToGuess ? 2 : 0;
 }
 
-void displayHangman(std::string wordToGuess, std::vector<char> guessedLetters, int lives) {
-    bool gameLost = false;
+void displayHangman(std::string wordToGuess, std::vector<char> guessedLetters) {
+    bool gameWon = false;
+    int lives = STARTING_LIVES;
+    std::string guessResultMessage;
     std::string guess;
+    std::vector<std::string> asciiImages = getAsciiFiles();
 
-    while (lives >= 0) {
+    while (lives > 0) {
         std::system("CLS");
 
-        std::vector<char> lettersInWordToGuess = std::vector<char>(wordToGuess.begin(), wordToGuess.end());
+        std::vector<char> lettersInWordToGuess(wordToGuess.begin(), wordToGuess.end());
 
-        std::cout << getAsciiFiles()[static_cast<size_t>(STARTING_LIVES) - static_cast<size_t>(lives)] << std::endl;
+        std::cout << asciiImages[static_cast<size_t>(STARTING_LIVES) - static_cast<size_t>(lives)] << std::endl;
 
         std::cout << "Lives left: " << lives << std::endl;
         std::cout << "Guessed letters: ";
@@ -116,24 +115,79 @@ void displayHangman(std::string wordToGuess, std::vector<char> guessedLetters, i
         }
         std::cout << "\n";
         std::cout << hideWord(wordToGuess, guessedLetters) << std::endl;
-        
-        if (lives == 0) break;
+        if(!guessResultMessage.empty()) std::cout << guessResultMessage << std::endl;
 
         std::getline(std::cin, guess); // Read the entire line as the guess
 
-        if (!guess.empty()) {
-            processGuess(
-                guess,
-                wordToGuess,
-                lettersInWordToGuess,
-                guessedLetters,
-                lives,
-                gameLost
-            );
+        if (guess.empty()) continue;
+
+        int guessResult = processGuess(
+            guess,
+            wordToGuess,
+            lettersInWordToGuess,
+            guessedLetters
+        );
+
+        if (guessResult == 3) {
+            guessResultMessage = "You have already guessed that!";
+        } else if (guessResult == 2) {
+            gameWon = true;
+            break;
+        }
+        else if (guessResult == 1) {
+            guessResultMessage = "You guessed correctly!";
+        }
+        else {
+            lives--;
+            guessResultMessage = "You guessed incorrectly!";
+            if (lives == 0) {
+                break;
+            }
         }
     }
 
-    std::cout << "You " << (gameLost ? "lost" : "won") << "! The word was: " << wordToGuess << std::endl;
+    std::system("CLS");
+    std::cout << "You " << (gameWon ? "won" : "lost") << "! The word was: " << wordToGuess << std::endl;
+    std::system("pause");
+}
+
+bool askUserToContinue() {
+    bool userWantsContinue = false;
+
+    while (true) {
+        std::system("CLS");
+        std::cout << "Do you want to play another time?" << std::endl;
+
+        if (userWantsContinue) {
+            std::cout << "<Yes> :  No " << std::endl;
+        }
+        else {
+            std::cout << " Yes  : <No>" << std::endl;
+        }
+
+        while (true)
+        {
+            if (_kbhit()) {
+                int key = _getch();
+
+                if (key == 224) {
+                    int arrowKey = _getch();
+
+                    if (arrowKey == 75) {
+                        userWantsContinue = true;
+                        break;
+                    }
+                    else if (arrowKey == 77) {
+                        userWantsContinue = false;
+                        break;
+                    }
+                }
+                else if (key == 13) { // Enter key
+                    return userWantsContinue;
+                }
+            }
+        }
+    }
 }
 
 int main() {
@@ -142,15 +196,10 @@ int main() {
     while (continueGame == true) {
         const std::string wordToGuess = giveRandomWord();
         std::vector<char> guessedLetters;
-        int lives = STARTING_LIVES;
 
-        displayHangman(wordToGuess, guessedLetters, lives);
+        displayHangman(wordToGuess, guessedLetters);
 
-        std::string s;
-        std::cout << "Play again?" << std::endl;
-        std::cin >> s;
-
-        if (s != "yes" && s != "Yes" && s != "y" && s != "Y") continueGame = false;
+        continueGame = askUserToContinue();
     }
 
     return 0;
